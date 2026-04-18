@@ -105,7 +105,7 @@ http://localhost:8062/predict
 docker build -t visibility-app .
 
 ### Run Container
-docker run -d -p 5000:5000 visibility-app
+docker run -d -p 8062:8062 visibility-app
 
 ---
 
