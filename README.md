@@ -158,9 +158,3 @@ This project demonstrates a complete production-grade ML system for time-series 
 - Scalable deployment  
 
 It is suitable for real-world industrial applications where accurate visibility prediction is critical.
-
----
-
-## GitHub
-
-Add your repository link here
