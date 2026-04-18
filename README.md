@@ -63,25 +63,7 @@ The goal is to improve decision-making in aviation, transportation, and safety-c
 
 ## Project Architecture
 
-src/
-│
-├── components/
-│   ├── data_ingestion.py
-│   ├── data_validation.py
-│   ├── data_transformation.py
-│   ├── feature_engineering.py
-│   ├── model_trainer_ml.py
-│   ├── model_evaluation.py
-│   ├── model_pusher.py
-│
-|   ├── pipeline/
-|   │   ├── training_pipeline.py
-|   │   ├── prediction_pipeline.py
-|   │
-|
-│
-├── config/
-│   ├── model.yaml
+## Project Architecture - ![WhatsApp Image 2022-09-22 at 15 29 19](https://user-images.githubusercontent.com/71321529/192722336-54016f79-89ef-4c8c-9d71-a6e91ebab03f.jpeg) ## Data Collection Architecture - ![WhatsApp Image 2022-09-22 at 15 29 10](https://user-images.githubusercontent.com/71321529/192721926-de265f9b-f301-4943-ac7d-948bff7be9a0.jpeg) ## Deployment Architecture - ![deployment](https://user-images.githubusercontent.com/104005791/199660875-c8e63457-432a-44cb-8a95-800870f3da15.png)
 
 
 ## How to Run Locally
@@ -99,18 +81,21 @@ pip install -r requirements.txt
 
 ### Step 4: Set Environment Variables
 export AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID>
+
 export AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY>
+
 export AWS_DEFAULT_REGION=<AWS_DEFAULT_REGION>
+
 export MONGODB_URL=<MONGODB_URL>
 
 ### Step 5: Run Application
-python app.py
+python3 app.py
 
 ### Step 6: Train Model
-http://localhost:5000/train
+http://localhost:8062/train
 
 ### Step 7: Prediction Endpoint
-http://localhost:5000/predict
+http://localhost:8062/predict
 
 ---
 
