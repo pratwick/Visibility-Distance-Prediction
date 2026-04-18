@@ -1,35 +1,112 @@
-from pandas import DataFrame
-from sklearn.pipeline import Pipeline
+import sys
+import os
+import numpy as np
+import pandas as pd
+from typing import List, Generator, Optional, Dict, Any
+from pymongo import MongoClient
+
 from src.exception import VisibilityException
 from src.logger import logging
-import os, sys
-
-from dataclasses import dataclass
 
 
+# ======================================
+# 🔥 MONGODB DATA ACCESS LAYER
+# ======================================
+class VisibilityData:
+    """
+    Handles MongoDB extraction for Visibility ML pipeline
+    """
 
-
-class VisibilityModel:
-    def __init__(self, preprocessing_object: Pipeline, trained_model_object: object):
-        self.preprocessing_object = preprocessing_object
-        self.trained_model_object = trained_model_object
-
-    def predict(self, dataframe: DataFrame) -> DataFrame:
-        logging.info("Entered predict method of srcTruckModel class")
-
+    def __init__(self, database_name: str):
         try:
-            logging.info("Using the trained model to get predictions")
+            self.database_name = database_name
 
-            transformed_feature = self.preprocessing_object.transform(dataframe)
+            self.mongo_url = os.getenv("MONGO_DB_URL")
+            if not self.mongo_url:
+                raise Exception("MONGO_DB_URL not found in environment variables")
 
-            logging.info("Used the trained model to get predictions")
-            return self.trained_model_object.predict(transformed_feature)
+            self.client = MongoClient(self.mongo_url, serverSelectionTimeoutMS=5000)
+
+            # Force connection check
+            self.client.server_info()
+
+            self.db = self.client[self.database_name]
+
+            logging.info("MongoDB connection established successfully")
 
         except Exception as e:
-            raise VisibilityException(e, sys) from e
+            raise VisibilityException(e, sys)
 
-    def __repr__(self):
-        return f"{type(self.trained_model_object).__name__}()"
+    # ======================================
+    # 📦 GET COLLECTION LIST
+    # ======================================
+    def get_collection_names(self) -> List[str]:
+        try:
+            collections = self.db.list_collection_names()
+            logging.info(f"Collections found: {collections}")
+            return collections
 
-    def __str__(self):
-        return f"{type(self.trained_model_object).__name__}()"
+        except Exception as e:
+            raise VisibilityException(e, sys)
+
+    # ======================================
+    # 📥 FETCH SINGLE COLLECTION
+    # ======================================
+    def get_collection_data(
+        self,
+        collection_name: str,
+        query: Optional[Dict[str, Any]] = None,
+        projection: Optional[Dict[str, Any]] = None
+    ) -> pd.DataFrame:
+        try:
+            logging.info(f"Fetching collection: {collection_name}")
+
+            collection = self.db[collection_name]
+
+            cursor = collection.find(query or {}, projection)
+
+            df = pd.DataFrame(list(cursor))
+
+            if df.empty:
+                logging.warning(f"No data found in {collection_name}")
+                return df
+
+            # Remove Mongo ID
+            if "_id" in df.columns:
+                df.drop(columns=["_id"], inplace=True)
+
+            # Normalize missing values
+            df.replace({"na": np.nan, "NA": np.nan, "null": np.nan}, inplace=True)
+
+            # Convert DATE safely
+            if "DATE" in df.columns:
+                df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+                df = df.dropna(subset=["DATE"])
+
+            logging.info(f"{collection_name} shape: {df.shape}")
+
+            return df
+
+        except Exception as e:
+            raise VisibilityException(e, sys)
+
+    # ======================================
+    # 🔁 EXPORT ALL COLLECTIONS
+    # ======================================
+    def export_collections_as_dataframe(self) -> Generator:
+        """
+        Yields (collection_name, dataframe)
+        """
+        try:
+            collections = self.get_collection_names()
+
+            for collection_name in collections:
+                df = self.get_collection_data(collection_name)
+
+                if df is None or df.empty:
+                    continue
+
+                yield collection_name, df
+
+        except Exception as e:
+            raise VisibilityException(e, sys)

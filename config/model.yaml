@@ -1,105 +1,54 @@
-
 model_selection:
-    model:
-      Linear Regression:
-        search_param_grid:
-          fit_intercept:
-            - True
-            - False
-          
-      Ridge Regression:
-        search_param_grid:
-          alpha:
-           - 0.001
-           - 0.01
-           - 0.1
-           - 1
-           - 10
-           - 100
-           - 1000
+  models:
 
-      Lasso Regression:
-        search_param_grid:
-          alpha:
-            - 0.001
-            - 0.01
-            - 0.1
-            - 1
-            - 10
-            - 100
-            - 1000
+    XGBoost:
+      search_param_grid:
+        n_estimators: [400, 600]
+        max_depth: [6, 8]
+        learning_rate: [0.03, 0.05]
+        subsample: [0.8]
+        colsample_bytree: [0.8]
+        gamma: [0, 0.1]
 
-      Random Forest Regression:
-        search_param_grid:
-          n_estimators:
-           - 50 
-           - 100 
-           - 130 
-          max_depth:
-           - 10
-           - 20
-           - 30
-           
-          min_samples_split:
-           - 2
-           - 6
-           - 10
-          bootstrap:
-           - True
-           - False
+    LightGBM:
+      search_param_grid:
+        n_estimators: [400, 600]
+        learning_rate: [0.03, 0.05]
+        num_leaves: [31, 64]
+        max_depth: [-1, 10]
+        subsample: [0.8]
+        colsample_bytree: [0.8]
 
-      Gradient Boosting Regression:
-        search_param_grid:
-          n_estimators:
-            - 50
-            - 100
-            - 150
-            - 200
-          max_depth:
-            - 3
-            - 5
-            - 7
-           
-      DecisionTreeRegressor:
-        search_param_grid:
-          criterion: 
-           - "mse"
-           - "friedman_mse" 
-           - "mae"
-          splitter: 
-           - "best" 
-           - "random"
-          max_features: 
-           - "auto" 
-           - "sqrt" 
-           - "log2"
-          max_depth: 
-           - 2
-           - 4
-           - 6
-           - 8
-           - 10
-           - 12
-           - 14
-           - 16
-          min_samples_split: 
-           - 2
-           - 4
-           - 6
-           - 8
-           - 10
-           - 12
-           - 14
-           - 16
-      
+        reg_alpha: [0.0, 0.1]
+        reg_lambda: [0.0, 0.1]
+        min_child_samples: [20]
 
-          
-    
+    RandomForest:
+      model_params:
+        n_estimators: 400
+        max_depth: 15
+        min_samples_split: 5
+        min_samples_leaf: 1
+        max_features: "sqrt"
+        random_state: 42
+        n_jobs: -1
 
 
+time_series:
+  lag_features: [1, 2, 3, 6, 12, 24, 48]
 
-           
+  rolling_features:
+    window_6:
+      mean: true
+      std: true
+    window_12:
+      mean: true
 
+stacking:
+  enabled: true
+  meta_model: Ridge
 
-
-      
+  base_models:
+    - XGBoost
+    - LightGBM
+    - RandomForest

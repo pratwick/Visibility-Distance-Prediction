@@ -1,23 +1,56 @@
 columns:
-  - DATE: Object
-  - VISIBILITY : FLOAT
-  - DRYBULBTEMPF: FLOAT
-  - WETBULBTEMPF: FLOAT
-  - DewPointTempF : FLOAT
-  - RelativeHumidity : FLOAT
-  - WindSpeed : FLOAT
-  - WindDirection : FLOAT
-  - StationPressure : FLOAT
-  - SeaLevelPressure : FLOAT
-  - Precip : FLOAT
+  DATE: datetime64[ns]
+  Temp_C: float64
+  Dew_Point_Temp_C: float64
+  Rel_Hum_%: float64
+  Wind_Speed_km/h: float64
+  Visibility_km: float64
+  Press_kPa: float64
+  Weather: object
+
+target_column: Visibility_km
 
 drop_columns:
-  - DATE 
-  - WETBULBTEMPF 
-  - DewPointTempF 
-  - StationPressure
-  - Precip
+  - Weather
 
-outlier_columns:
-  - WindSpeed
-  - SeaLevelPressure
+feature_engineering:
+
+  time_features:
+    - hour
+    - day
+    - month
+    - season
+
+  physics_features:
+    - temp_dew_diff
+    - humidity_temp
+    - pressure_change
+
+  weather_features:
+    - is_fog
+    - one_hot_encoding: Weather
+
+  lag_features:
+    target: Visibility_km
+    lags: [1, 2, 3, 6, 12, 24, 48]
+
+  rolling_features:
+    target: Visibility_km
+    windows:
+      - size: 6
+        metrics: [mean, std]
+      - size: 12
+        metrics: [mean]
+
+outlier_handling:
+  columns:
+    - Wind_Speed_km/h
+    - Press_kPa
+    - Visibility_km
+  method: IQR
+  factor: 1.5
+
+
+split:
+  method: time_based
+  ratio: 0.8

@@ -1,135 +1,126 @@
 import sys
-from typing import Union
 import os
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from dataclasses import dataclass
 
-from collections import namedtuple
 from src.constant import *
 from src.exception import VisibilityException
 from src.logger import logging
 from src.utils.main_utils import MainUtils
-from dataclasses import dataclass
 
 @dataclass
 class DataTransformationConfig:
-    data_transformation_dir=os.path.join(artifact_folder,'data_transformation')
-    transformed_train_file_path=os.path.join(data_transformation_dir, 'train.npy')
-    transformed_test_file_path=os.path.join(data_transformation_dir, 'test.npy') 
-    transformed_object_file_path=os.path.join( data_transformation_dir, 'preprocessing.pkl' )
-
-
-
-
-
+    data_transformation_dir = os.path.join(artifact_folder, "data_transformation")
 
 class DataTransformation:
-    def __init__(self,
-                 valid_data_dir):
-       
+    def __init__(self, valid_data_dir):
         self.valid_data_dir = valid_data_dir
+        self.config = DataTransformationConfig()
+        self.utils = MainUtils()
 
-        self.data_transformation_config = DataTransformationConfig()
-
-
-        self.utils =  MainUtils()
-        
-    
-    def drop_schema_columns(self, dataframe:pd.DataFrame) -> pd.DataFrame:
-        """
-        Method Name :   drop_schema_columns
-        Description :   This method reads the schema.yml file and drops the column in th dataset based on the schema given. 
-        
-        Output      :   a pd.DataFrame dropping the schema columns
-        On Failure  :   Write an exception log and then raise an exception
-        
-        Version     :   1.2
-        Revisions   :   moved setup to cloud
-        """
+    def get_data(self):
         try:
-            _schema_config = self.utils.read_schema_config_file()
-            df = dataframe.drop(columns =  _schema_config["drop_columns"])
+            files = os.listdir(self.valid_data_dir)
+            df_list = [
+                pd.read_csv(os.path.join(self.valid_data_dir, f))
+                for f in files
+            ]
+
+            df = pd.concat(df_list, ignore_index=True)
+
+            df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+            df = df.dropna(subset=["DATE"])
+            df = df.sort_values("DATE").reset_index(drop=True)
 
             return df
-        except Exception as e:
-            raise VisibilityException(e,sys)
 
-    @staticmethod
-    def get_merged_batch_data(valid_data_dir:str) -> pd.DataFrame:
-        """
-        Method Name :   get_merged_batch_data
-        Description :   This method reads all the validated raw data from the valid_data_dir and returns a pandas DataFrame containing the merged data. 
-        
-        Output      :   a pandas DataFrame containing the merged data 
-        On Failure  :   Write an exception log and then raise an exception
-        
-        Version     :   1.2
-        Revisions   :   moved setup to cloud
-        """
+        except Exception as e:
+            raise VisibilityException(e, sys)
+
+    def feature_engineering(self, df: pd.DataFrame) -> pd.DataFrame:
         try:
-            raw_files = os.listdir(valid_data_dir)
-            csv_data = []
-            for filename in raw_files:
-                data = pd.read_csv(os.path.join(valid_data_dir, filename))
-                csv_data.append(data)
+            logging.info("Feature engineering started")
 
-            merged_data = pd.concat(csv_data)
+            df["hour"] = df["DATE"].dt.hour
+            df["day"] = df["DATE"].dt.day
+            df["month"] = df["DATE"].dt.month
+            df["season"] = (df["month"] % 12 + 3) // 3
 
-            return merged_data
+            df['temp_dew_diff'] = df['Temp_C'] - df['Dew_Point_Temp_C']
+            df['humidity_temp'] = df['Rel_Hum_%'] * df['Temp_C']
+            df['pressure_change'] = df['Press_kPa'].diff()
+
+            if "Weather" in df.columns:
+                df["is_fog"] = df["Weather"].astype(str).str.contains("Fog", case=False).astype(int)
+                weather_dummies = df["Weather"].str.get_dummies(sep=",")
+                df = pd.concat([df, weather_dummies], axis=1)
+
+            lags = [1, 2, 3, 6, 12, 24, 48]
+
+            for lag in lags:
+                df[f"vis_lag_{lag}"] = df["Visibility_km"].shift(lag)
+
+            df["vis_roll_mean_6"] = df["Visibility_km"].rolling(6).mean()
+            df["vis_roll_mean_12"] = df["Visibility_km"].rolling(12).mean()
+            df["vis_roll_std_6"] = df["Visibility_km"].rolling(6).std()
+
+            df = df.dropna().reset_index(drop=True)
+
+            logging.info("Feature engineering completed")
+
+            return df
+
         except Exception as e:
-            raise VisibilityException(e,sys)
-        
-    
+            raise VisibilityException(e, sys)
 
+    def split_time_series(self, df: pd.DataFrame):
+        try:
+            split_index = int(len(df) * 0.8)
 
-             
-    def initiate_data_transformation(self) :
-        """
-            Method Name :   initiate_data_transformation
-            Description :   This method initiates the data transformation component for the pipeline 
-            
-            Output      :   data transformation artifact is created and returned 
-            On Failure  :   Write an exception log and then raise an exception
-            
-            Version     :   1.2
-            Revisions   :   moved setup to cloud
-        """
+            train_df = df.iloc[:split_index].copy()
+            test_df = df.iloc[split_index:].copy()
 
-        logging.info(
-            "Entered initiate_data_transformation method of Data_Transformation class"
-        )
+            return train_df, test_df
+
+        except Exception as e:
+            raise VisibilityException(e, sys)
+
+    def initiate_data_transformation(self):
+        logging.info("Data transformation started")
+        print("Data transformation started")
 
         try:
-            dataframe = self.get_merged_batch_data(valid_data_dir=self.valid_data_dir)
-            
-            dataframe = self.drop_schema_columns(dataframe=dataframe)
-            
+            df = self.get_data()
 
-            X = dataframe.drop(columns= TARGET_COLUMN)
-            y = dataframe[TARGET_COLUMN]
-            
-            X_train, X_test, y_train, y_test = train_test_split(X,y, test_size = 0.2 )
+            # schema-driven drop
+            schema = self.utils.read_schema_config_file()
+            df = df.drop(columns=schema["drop_columns"], errors="ignore")
 
+            # feature engineering
+            df = self.feature_engineering(df)
 
+            # split
+            train_df, test_df = self.split_time_series(df)
 
-            preprocessor = StandardScaler()
+            target = "Visibility_km"
 
-            X_train_scaled =  preprocessor.fit_transform(X_train)
-            X_test_scaled  =  preprocessor.transform(X_test)
+            X_train = train_df.drop(columns=[target, "DATE"])
+            y_train = train_df[target]
 
+            X_test = test_df.drop(columns=[target, "DATE"])
+            y_test = test_df[target]
+            print("Data Tranformation completed successfully")
+            logging.info("Data transformation completed")
 
-            preprocessor_path = self.data_transformation_config.transformed_object_file_path
-            os.makedirs(os.path.dirname(preprocessor_path), exist_ok= True)
-            self.utils.save_object(preprocessor_path,
-                        obj= preprocessor)
-
-            train_arr = np.c_[X_train_scaled, np.array(y_train) ]
-            test_arr = np.c_[ X_test_scaled, np.array(y_test) ]
-
-            return (train_arr, test_arr, preprocessor_path)
-        
+            return {
+                "X_train": X_train,
+                "y_train": y_train.values,
+                "X_test": X_test,
+                "y_test": y_test.values,
+                "train_df": train_df,
+                "test_df": test_df
+            }
 
         except Exception as e:
-            raise VisibilityException(e, sys) from e
+            raise VisibilityException(e, sys)

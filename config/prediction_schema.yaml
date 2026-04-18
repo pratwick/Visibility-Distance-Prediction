@@ -1,18 +1,93 @@
 columns:
-  - DATE: O
-  - DRYBULBTEMPF: float64
-  - WETBULBTEMPF: float64
-  - DewPointTempF : float64
-  - RelativeHumidity : float64
-  - WindSpeed : float64
-  - WindDirection : float64
-  - StationPressure : float64
-  - SeaLevelPressure : float64
-  - Precip : float64
+  DATE: datetime64[ns]
+  Temp_C: float64
+  Dew Point Temp_C: float64
+  Rel Hum_%: float64
+  Wind Speed_km/h: float64
+  Visibility_km: float64
+  Press_kPa: float64
+  Weather: object
+
+target_column: Visibility_km
+
+model_features:
+
+  # raw meteorological inputs
+  - Temp_C
+  - Dew Point Temp_C
+  - Rel Hum_%
+  - Wind Speed_km/h
+  - Press_kPa
+
+  # time features
+  - hour
+  - day
+  - month
+  - season
+
+  # physics-based features
+  - temp_dew_diff
+  - humidity_temp
+  - pressure_change
+
+  # weather encoding
+  - is_fog
+
+  # lag features
+  - vis_lag_1
+  - vis_lag_2
+  - vis_lag_3
+  - vis_lag_6
+  - vis_lag_12
+  - vis_lag_24
+  - vis_lag_48
+
+  # rolling features
+  - vis_roll_mean_6
+  - vis_roll_mean_12
+  - vis_roll_std_6
+
 
 drop_columns:
-  - DATE 
-  - WETBULBTEMPF 
-  - DewPointTempF 
-  - StationPressure
-  - Precip
+  - Weather
+
+
+engineered_features:
+
+  time_features:
+    - hour
+    - day
+    - month
+    - season
+
+  physics_features:
+    - temp_dew_diff
+    - humidity_temp
+    - pressure_change
+
+  weather_features:
+    - is_fog
+
+  lag_features:
+    target: Visibility_km
+    lags: [1, 2, 3, 6, 12, 24, 48]
+
+  rolling_features:
+    target: Visibility_km
+    window_small: 6
+    window_large: 12
+    metrics:
+      - mean
+      - std
+
+outlier_handling:
+  columns:
+    - Wind Speed_km/h
+    - Press_kPa
+  method: IQR
+  factor: 1.5
+
+
+split:
+  method: time_based
+  ratio: 0.8

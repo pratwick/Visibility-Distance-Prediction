@@ -1,235 +1,165 @@
 import sys
-from typing import List
-import pandas as pd
-import re
 import os
-import shutil
+import pandas as pd
+import numpy as np
+from dataclasses import dataclass
 
 from src.constant import *
 from src.exception import VisibilityException
 from src.logger import logging
 from src.utils.main_utils import MainUtils
-from dataclasses import dataclass
-
-SAMPLE_FILE_NAME =  "visibility_08012020_120000.csv",
-LENGTH_OF_DATE_STAMP_IN_FILE =  8
-LENGTH_OF_TIME_STAMP_IN_FILE =  6
-NUMBER_OF_COLUMNS  = 11
 
 @dataclass
 class DataValidationConfig:
-    data_validation_dir:str =os.path.join(artifact_folder,'data_validation')
-    valid_data_dir:str =os.path.join(data_validation_dir,'validated')
-    invalid_data_dir:str =os.path.join(data_validation_dir,'invalid')
+    data_validation_dir: str = os.path.join(artifact_folder, "data_validation")
+    valid_data_dir: str = os.path.join(data_validation_dir, "validated")
+    invalid_data_dir: str = os.path.join(data_validation_dir, "invalid")
 
 class DataValidation:
-    def __init__(self, 
-                 raw_data_store_dir:str):
-        
+    def __init__(self, raw_data_store_dir: str):
         self.raw_data_store_dir = raw_data_store_dir
-        self.data_validation_config = DataValidationConfig()
-        
+        self.config = DataValidationConfig()
         self.utils = MainUtils()
+        self.schema = self.utils.read_schema_config_file()
 
-        self._schema_config = self.utils.read_schema_config_file()
-
-    
-    def validate_file_name(self,file_path:str) -> bool:
-        """
-            Method Name :   validate_file_columns
-            Description :   This method validates the file name for a particular raw file 
-            
-            Output      :   True or False value is returned based on the schema 
-            On Failure  :   Write an exception log and then raise an exception
-            
-            Version     :   1.2
-            Revisions   :   moved setup to cloud
-        """
+    def load_data(self) -> pd.DataFrame:
         try:
+            files = os.listdir(self.raw_data_store_dir)
 
-            file_name = os.path.basename(file_path)
-            regex = "['visibility']+['\_'']+[\d_]+[\d]+\.csv"
-            if (re.match(regex, file_name)):
-                splitAtDot = re.split('.csv', file_name)
-                splitAtDot = (re.split('_', splitAtDot[0]))
-                filename_validation_status =  len(splitAtDot[1]) == LENGTH_OF_DATE_STAMP_IN_FILE  and  len(splitAtDot[2]) == LENGTH_OF_TIME_STAMP_IN_FILE
-            else:
-                filename_validation_status = False
+            df_list = [
+                pd.read_csv(os.path.join(self.raw_data_store_dir, f))
+                for f in files
+            ]
 
+            df = pd.concat(df_list, ignore_index=True)
 
-            return filename_validation_status
-        
+            logging.info(f"Raw data shape: {df.shape}")
+
+            return df
+
         except Exception as e:
-            raise VisibilityException(e,sys)
+            raise VisibilityException(e, sys)
 
-    def validate_no_of_columns(self, file_path:str) -> bool:
-        """
-            Method Name :   validate_column_columns
-            Description :   This method validates the number of columns for a particular raw file
-            
-            Output      :   True or False value is returned based on the schema 
-            On Failure  :   Write an exception log and then raise an exception
-            
-            Version     :   1.2
-            Revisions   :   moved setup to cloud
-        """
-        
+    def validate_schema(self, df: pd.DataFrame) -> bool:
         try:
-            dataframe = pd.read_csv(file_path)
-            column_length_validation_status = len(dataframe.columns) == len(self._schema_config["columns"])
-        
+            expected_cols = set(self.schema["columns"].keys())
+            actual_cols = set(df.columns)
 
-            return column_length_validation_status
+            missing = expected_cols - actual_cols
+            extra = actual_cols - expected_cols
+
+            if missing:
+                logging.error(f"Missing columns: {missing}")
+                return False
+
+            if extra:
+                logging.warning(f"Extra columns ignored: {extra}")
+
+            return True
 
         except Exception as e:
-            raise VisibilityException(e,sys)
+            raise VisibilityException(e, sys)
 
-
-    def validate_missing_values_in_whole_column(self,file_path: str) -> bool:
-        """
-            Method Name :   validate_missing_values_in_whole_column
-            Description :   This method validates if there is any column in the csv file 
-                            which has all the values as null.
-            
-            Output      :   True or False value is returned based on the condition 
-            On Failure  :   Write an exception log and then raise an exception
-            
-            Version     :   1.2
-            Revisions   :   moved setup to cloud
-        """
-
-        try: 
-
-            dataframe =pd.read_csv(file_path)
-            no_of_columns_with_whole_null_values = 0
-            for columns in dataframe:
-                if (len(dataframe[columns]) - dataframe[columns].count()) == len(dataframe[columns]):  #checking null values
-                    no_of_columns_with_whole_null_values +=1
-
-            if no_of_columns_with_whole_null_values == 0:
-                missing_value_validation_status = True
-            else:
-                missing_value_validation_status = False
-
-            return missing_value_validation_status
-        
-        except Exception as e:
-            raise VisibilityException(e,sys)
-
-
-    def get_raw_batch_files_paths(self) -> List:
-        """
-            Method Name :   get_raw_batch_files_paths
-            Description :   This method returns all the raw file dir paths in a list.
-                            
-            
-            Output      :   List of dir paths
-            On Failure  :   Write an exception log and then raise an exception
-            
-            Version     :   1.2
-            Revisions   :   moved setup to cloud
-        """
-
+    def validate_missing_values(self, df: pd.DataFrame) -> bool:
         try:
-            raw_batch_files_names = os.listdir(self.raw_data_store_dir)
-            raw_batch_files_paths = [os.path.join(self.raw_data_store_dir, raw_batch_file_name ) for raw_batch_file_name in raw_batch_files_names]
-            return raw_batch_files_paths
+            missing_ratio = df.isnull().mean()
+
+            # allow up to 25% missing (real-world tolerance)
+            if (missing_ratio > 0.25).any():
+                logging.error(f"Too many missing values:\n{missing_ratio}")
+                return False
+
+            return True
 
         except Exception as e:
-            raise VisibilityException(e,sys)
+            raise VisibilityException(e, sys)
 
-    def move_raw_files_to_validation_dir(self, src_path:str, dest_path:str):
-        
-        """
-            Method Name :   move_raw_files_to_validation_dir
-            Description :   This method moves validated raw files to the validated directory.
-                            
-            
-            Output      :   NA
-            On Failure  :   Write an exception log and then raise an exception
-            
-            Version     :   1.2
-            Revisions   :   moved setup to cloud
-        """
+    def validate_time_series(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            logging.info("Validating time series data")
 
+            df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+            df = df.dropna(subset=["DATE"])
+
+            df = df.sort_values("DATE").drop_duplicates(subset=["DATE"])
+            df = df.reset_index(drop=True)
+
+            # optional sanity check
+            time_diff = df["DATE"].diff().dt.total_seconds()
+
+            if time_diff.max() > 86400 * 3:
+                logging.warning("Large time gap detected (>3 days)")
+
+            return df
+
+        except Exception as e:
+            raise VisibilityException(e, sys)
+
+    def validate_ranges(self, df: pd.DataFrame) -> pd.DataFrame:
+        try:
+            logging.info("Validating feature ranges")
+
+            # humidity (if exists)
+            if "Rel Hum_%" in df.columns:
+                df = df[df["Rel Hum_%"].between(0, 100)]
+
+            # wind speed
+            if "Wind_Speed_km/h" in df.columns:
+                df = df[df["Wind_Speed_km/h"] >= 0]
+
+            # pressure sanity
+            if "Press_kPa" in df.columns:
+                df = df[df["Press_kPa"].between(80, 120)]
+
+            # visibility target
+            if "Visibility_km" in df.columns:
+                df = df[df["Visibility_km"] >= 0]
+
+            return df
+
+        except Exception as e:
+            raise VisibilityException(e, sys)
+
+    def save_valid_data(self, df: pd.DataFrame):
+        try:
+            os.makedirs(self.config.valid_data_dir, exist_ok=True)
+
+            path = os.path.join(self.config.valid_data_dir, "validated.csv")
+            df.to_csv(path, index=False)
+
+            logging.info(f"Validated data saved at {path}")
+
+            return self.config.valid_data_dir
+
+        except Exception as e:
+            raise VisibilityException(e, sys)
+
+    def initiate_data_validation(self):
+        logging.info("Starting data validation pipeline")
 
         try:
-            os.makedirs(dest_path, exist_ok=True)
-            if os.path.basename(src_path) not in os.listdir(dest_path):
-                shutil.move(src_path, dest_path)
-        except Exception as e:
-            raise VisibilityException(e,sys)
+            df = self.load_data()
 
+            # schema check
+            if not self.validate_schema(df):
+                raise Exception("Schema validation failed")
 
-    def validate_raw_files(self) ->bool:
-        """
-            Method Name :   validate_raw_files
-            Description :   This method validates the raw files for training.
-                            
-            
-            Output      :   True or False value is returned based on the validated file number 
+            # missing values
+            if not self.validate_missing_values(df):
+                raise Exception("Missing value validation failed")
 
-            On Failure  :   Write an exception log and then raise an exception
-            
-            Version     :   1.2
-            Revisions   :   moved setup to cloud
-        """
+            # time series cleanup
+            df = self.validate_time_series(df)
 
-        try:
-            raw_batch_files_paths = self.get_raw_batch_files_paths()
+            # range validation
+            df = self.validate_ranges(df)
 
-            validated_files = 0
-            for raw_file_path in raw_batch_files_paths:
-                file_name_validation_status =  self.validate_file_name(raw_file_path)
-                column_length_validation_status = self.validate_no_of_columns(raw_file_path)
-                missing_value_validation_status =  self.validate_missing_values_in_whole_column(raw_file_path)
+            # save
+            valid_dir = self.save_valid_data(df)
 
-                if ( file_name_validation_status 
-                    and column_length_validation_status 
-                    and missing_value_validation_status  ):
+            logging.info("Data validation completed successfully")
 
-                    validated_files+=1
-
-                    self.move_raw_files_to_validation_dir(raw_file_path, self.data_validation_config.valid_data_dir)
-                else:
-                    self.move_raw_files_to_validation_dir(raw_file_path, self.data_validation_config.invalid_data_dir)
-
-            validation_status = validated_files>0
-     
-            return validation_status
+            return valid_dir
 
         except Exception as e:
-            raise VisibilityException(e,sys)
-            
-
-
-    
-
-    def initiate_data_validation(self) :
-        """
-        Method Name :   initiate_data_validation
-        Description :   This method initiates the data validation component for the pipeline
-        
-        Output      :   Returns data validation artifact
-        On Failure  :   Write an exception log and then raise an exception
-        
-        Version     :   1.2
-        Revisions   :   moved setup to cloud
-        """
-        logging.info("Entered initiate_data_validation method of Data_Validation class")
-
-        try:
-            logging.info("Initiated data validation for the dataset")
-            validation_status = self.validate_raw_files()
-
-            if validation_status:
-                valid_data_dir = self.data_validation_config.valid_data_dir
-                return valid_data_dir
-            else:
-                raise Exception("No data could be validated. Pipeline stopped.")
-
-            
-            
-           
-        except Exception as e:
-            raise VisibilityException(e, sys) from e
+            raise VisibilityException(e, sys)

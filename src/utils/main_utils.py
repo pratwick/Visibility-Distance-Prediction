@@ -1,66 +1,86 @@
 import sys
-from typing import Dict, Tuple
 import os
-import pandas as pd
-import pickle
 import yaml
+import pickle
+from typing import Any, Dict
 
-from src.constant import *
 from src.exception import VisibilityException
 from src.logger import logging
 
 
+# ======================================
+# 🔥 UTILITY CLASS (PRODUCTION READY)
+# ======================================
 class MainUtils:
     def __init__(self) -> None:
         pass
 
+    # ======================================
+    # 📄 READ YAML FILE (SAFE)
+    # ======================================
     def read_yaml_file(self, filename: str) -> dict:
         try:
-            with open(filename, "rb") as yaml_file:
-                return yaml.safe_load(yaml_file)
+            if not os.path.exists(filename):
+                raise FileNotFoundError(f"YAML file not found: {filename}")
+
+            with open(filename, "r", encoding="utf-8") as yaml_file:
+                content = yaml.safe_load(yaml_file)
+
+            if content is None:
+                raise ValueError(f"YAML file is empty: {filename}")
+
+            return content
 
         except Exception as e:
-            raise VisibilityException(e, sys) from e
+            raise VisibilityException(e, sys)
 
+    # ======================================
+    # 📦 READ SCHEMA CONFIG
+    # ======================================
     def read_schema_config_file(self) -> dict:
         try:
-            schema_config = self.read_yaml_file(os.path.join("config", "schema.yaml"))
+            schema_path = os.path.join("config", "schema.yaml")
 
-            return schema_config
+            return self.read_yaml_file(schema_path)
 
         except Exception as e:
-            raise VisibilityException(e, sys) from e
+            raise VisibilityException(e, sys)
 
-    
-
+    # ======================================
+    # 💾 SAVE OBJECT (MODEL / SCALER)
+    # ======================================
     @staticmethod
-    def save_object(file_path: str, obj: object) -> None:
-        logging.info("Entered the save_object method of MainUtils class")
+    def save_object(file_path: str, obj: Any) -> None:
+        logging.info("Saving object...")
 
         try:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
             with open(file_path, "wb") as file_obj:
                 pickle.dump(obj, file_obj)
 
-            logging.info("Exited the save_object method of MainUtils class")
+            logging.info(f"Object saved at: {file_path}")
 
         except Exception as e:
-            raise VisibilityException(e, sys) from e
+            raise VisibilityException(e, sys)
 
-    
-
+    # ======================================
+    # 📥 LOAD OBJECT
+    # ======================================
     @staticmethod
-    def load_object(file_path: str) -> object:
-        logging.info("Entered the load_object method of MainUtils class")
+    def load_object(file_path: str) -> Any:
+        logging.info("Loading object...")
 
         try:
+            if not os.path.exists(file_path):
+                raise FileNotFoundError(f"Object file not found: {file_path}")
+
             with open(file_path, "rb") as file_obj:
                 obj = pickle.load(file_obj)
 
-            logging.info("Exited the load_object method of MainUtils class")
+            logging.info(f"Object loaded from: {file_path}")
 
             return obj
 
         except Exception as e:
-            raise VisibilityException(e, sys) from e
-        
-    
+            raise VisibilityException(e, sys)

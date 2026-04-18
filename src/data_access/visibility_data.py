@@ -1,76 +1,91 @@
 import sys
-from typing import Optional, List
-
-from database_connect import mongo_operation as mongo
-from pymongo import MongoClient
+import os
 import numpy as np
 import pandas as pd
-from src.constant import *
-from src.configuration.mongo_db_connection import MongoDBClient
+from typing import List, Generator
+from pymongo import MongoClient
+
 from src.exception import VisibilityException
-import os
+from src.logger import logging
 
 class VisibilityData:
     """
-    This class help to export entire mongo db record as pandas dataframe
+    Handles MongoDB extraction for Visibility ML pipeline
     """
 
-    def __init__(self,
-                  database_name:str):
-        """
-        """
+    def __init__(self, database_name: str):
         try:
-
             self.database_name = database_name
             self.mongo_url = os.getenv("MONGO_DB_URL")
-            
+
+            self.client = MongoClient(self.mongo_url)
+            self.db = self.client[self.database_name]
+
+            logging.info("MongoDB connection established")
+
         except Exception as e:
             raise VisibilityException(e, sys)
 
-    def get_collection_names(self)-> List:
-
-        mongo_db_client = MongoClient(self.mongo_url)
-        collection_names = mongo_db_client[self.database_name].list_collection_names()
-        return collection_names
-
-
-
-    def get_collection_data(self,
-                            collection_name:str ) -> pd.DataFrame:
-        
-        mongo_connection = mongo(
-            client_url= self.mongo_url,
-            database_name= self.database_name,
-            collection_name= collection_name
-        )
-        df = mongo_connection.find()
-        
-        if "_id" in df.columns.to_list():
-            df = df.drop(columns=["_id"])
-        df = df.replace({"na": np.nan})
-        return df
-
-
-
-
-    def export_collections_as_dataframe(
-        self) -> pd.DataFrame:
+    def get_collection_names(self) -> List[str]:
         try:
-            """
-            export entire collectin as dataframe:
-            return dd.DataFrame of collection
-            """
-           
-            collections = self.get_collection_names()
-    
-            
-            for collection_name in collections:
-                df = self.get_collection_data(collection_name= collection_name)
-                yield collection_name ,df
-
-            
+            collections = self.db.list_collection_names()
+            logging.info(f"Collections found: {collections}")
+            return collections
 
         except Exception as e:
             raise VisibilityException(e, sys)
 
-   
+    def get_collection_data(
+        self,
+        collection_name: str,
+        query: dict = None,
+        projection: dict = None
+    ) -> pd.DataFrame:
+        try:
+            logging.info(f"Fetching collection: {collection_name}")
+
+            collection = self.db[collection_name]
+
+            cursor = collection.find(query or {}, projection)
+
+            df = pd.DataFrame(list(cursor))
+
+            if df.empty:
+                logging.warning(f"No data in {collection_name}")
+                return df
+
+            if "_id" in df.columns:
+                df.drop(columns=["_id"], inplace=True)
+
+            df.replace({"na": np.nan, "NA": np.nan, "null": np.nan}, inplace=True)
+
+            if "DATE" in df.columns:
+                df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+                df = df.dropna(subset=["DATE"])
+
+            logging.info(f"{collection_name} shape: {df.shape}")
+
+            return df
+
+        except Exception as e:
+            raise VisibilityException(e, sys)
+
+    def export_collections_as_dataframe(self) -> Generator:
+        """
+        Yields (collection_name, dataframe)
+        """
+        try:
+            collections = self.get_collection_names()
+
+            for collection_name in collections:
+
+                df = self.get_collection_data(collection_name)
+
+                # skip empty datasets
+                if df is None or df.empty:
+                    continue
+
+                yield collection_name, df
+
+        except Exception as e:
+            raise VisibilityException(e, sys)
