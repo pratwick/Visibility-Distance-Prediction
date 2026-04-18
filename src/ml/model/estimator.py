@@ -9,9 +9,6 @@ from src.exception import VisibilityException
 from src.logger import logging
 
 
-# ======================================
-# 🔥 MONGODB DATA ACCESS LAYER
-# ======================================
 class VisibilityData:
     """
     Handles MongoDB extraction for Visibility ML pipeline
@@ -37,9 +34,6 @@ class VisibilityData:
         except Exception as e:
             raise VisibilityException(e, sys)
 
-    # ======================================
-    # 📦 GET COLLECTION LIST
-    # ======================================
     def get_collection_names(self) -> List[str]:
         try:
             collections = self.db.list_collection_names()
@@ -49,9 +43,6 @@ class VisibilityData:
         except Exception as e:
             raise VisibilityException(e, sys)
 
-    # ======================================
-    # 📥 FETCH SINGLE COLLECTION
-    # ======================================
     def get_collection_data(
         self,
         collection_name: str,
@@ -90,9 +81,6 @@ class VisibilityData:
         except Exception as e:
             raise VisibilityException(e, sys)
 
-    # ======================================
-    # 🔁 EXPORT ALL COLLECTIONS
-    # ======================================
     def export_collections_as_dataframe(self) -> Generator:
         """
         Yields (collection_name, dataframe)

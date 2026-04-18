@@ -7,17 +7,10 @@ from typing import Any, Dict
 from src.exception import VisibilityException
 from src.logger import logging
 
-
-# ======================================
-# 🔥 UTILITY CLASS (PRODUCTION READY)
-# ======================================
 class MainUtils:
     def __init__(self) -> None:
         pass
 
-    # ======================================
-    # 📄 READ YAML FILE (SAFE)
-    # ======================================
     def read_yaml_file(self, filename: str) -> dict:
         try:
             if not os.path.exists(filename):
@@ -34,9 +27,6 @@ class MainUtils:
         except Exception as e:
             raise VisibilityException(e, sys)
 
-    # ======================================
-    # 📦 READ SCHEMA CONFIG
-    # ======================================
     def read_schema_config_file(self) -> dict:
         try:
             schema_path = os.path.join("config", "schema.yaml")
@@ -46,9 +36,6 @@ class MainUtils:
         except Exception as e:
             raise VisibilityException(e, sys)
 
-    # ======================================
-    # 💾 SAVE OBJECT (MODEL / SCALER)
-    # ======================================
     @staticmethod
     def save_object(file_path: str, obj: Any) -> None:
         logging.info("Saving object...")
@@ -64,9 +51,6 @@ class MainUtils:
         except Exception as e:
             raise VisibilityException(e, sys)
 
-    # ======================================
-    # 📥 LOAD OBJECT
-    # ======================================
     @staticmethod
     def load_object(file_path: str) -> Any:
         logging.info("Loading object...")

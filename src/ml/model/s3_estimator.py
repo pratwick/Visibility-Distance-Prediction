@@ -7,10 +7,6 @@ from src.cloud_storage.aws_storage import SimpleStorageService
 from src.exception import VisibilityException
 from src.logger import logging
 
-
-# ======================================
-# 🔥 S3 MODEL ESTIMATOR (STACKING READY)
-# ======================================
 class VisibilityEstimator:
     """
     Production-grade S3 model handler for visibility prediction
@@ -24,15 +20,9 @@ class VisibilityEstimator:
         self.s3 = SimpleStorageService()
         self.loaded_model = None
 
-    # ======================================
-    # 📦 S3 KEY
-    # ======================================
     def _get_s3_key(self):
         return f"{self.model_name}/{self.model_version}/model.pkl"
 
-    # ======================================
-    # 🔍 CHECK MODEL
-    # ======================================
     def is_model_present(self) -> bool:
         try:
             key = self._get_s3_key()
@@ -44,9 +34,6 @@ class VisibilityEstimator:
             logging.error(f"Model check failed: {e}")
             return False
 
-    # ======================================
-    # 📥 LOAD MODEL (WITH RETRY)
-    # ======================================
     def load_model(self):
         try:
             key = self._get_s3_key()
@@ -72,9 +59,6 @@ class VisibilityEstimator:
         except Exception as e:
             raise VisibilityException(e, sys)
 
-    # ======================================
-    # 💾 SAVE MODEL
-    # ======================================
     def save_model(self, from_file: str, remove: bool = False):
         try:
             key = self._get_s3_key()
@@ -93,9 +77,6 @@ class VisibilityEstimator:
         except Exception as e:
             raise VisibilityException(e, sys)
 
-    # ======================================
-    # 🔎 VALIDATION (CRITICAL FIX)
-    # ======================================
     def _validate_input(self, df: DataFrame):
         if not isinstance(df, pd.DataFrame):
             raise ValueError("Input must be a pandas DataFrame")
@@ -103,9 +84,6 @@ class VisibilityEstimator:
         if df.empty:
             raise ValueError("Input DataFrame is empty")
 
-    # ======================================
-    # ⚙️ ALIGN FEATURES (VERY IMPORTANT)
-    # ======================================
     def _align_features(self, df: pd.DataFrame, model):
         """
         Ensures inference input matches training features
@@ -126,9 +104,6 @@ class VisibilityEstimator:
         except Exception as e:
             raise VisibilityException(e, sys)
 
-    # ======================================
-    # 🚀 PREDICTION
-    # ======================================
     def predict(self, dataframe: DataFrame):
         try:
             logging.info("Starting prediction pipeline")
